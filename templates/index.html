@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>دستیار مالی — هزینه‌ها</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
+  <meta name="theme-color" content="#2e9e6b">
+  <link rel="apple-touch-icon" href="{{ url_for('static', filename='icon-192.png') }}">
+</head>
+<body>
+  <header class="topbar">
+    <h1>💰 دستیار مالی</h1>
+    <div class="total">جمع کل: <strong>{{ "{:,}".format(total_toman) }}</strong> تومان</div>
+  </header>
+  
+  <!-- بخش گزارش‌ها -->
+	<section class="summary-grid">
+	<div class="summary-card">
+		<div class="summary-label">امروز</div>
+		<div class="summary-value">{{ "{:,}".format(summary.today) }}<span>تومان</span></div>
+	</div>
+	<div class="summary-card">
+		<div class="summary-label">۷ روز اخیر</div>
+		<div class="summary-value">{{ "{:,}".format(summary.week) }}<span>تومان</span></div>
+	</div>
+	<div class="summary-card">
+		<div class="summary-label">۳۰ روز اخیر</div>
+		<div class="summary-value">{{ "{:,}".format(summary.month) }}<span>تومان</span></div>
+	</div>
+	</section>
+
+  <main class="container">
+  <!-- کارت ضبط صدا -->
+	<section class="card voice-card">
+	<h2>🎙️ ثبت با صدا</h2>
+	<p class="hint">دکمه رو بزن و بگو مثلاً: «۱۲۰ هزار تومن بنزین زدم»</p>
+	
+	<div class="voice-controls">
+		<button id="recordBtn" class="record-btn" type="button">
+		<span class="record-icon">🎤</span>
+		<span class="record-label">شروع ضبط</span>
+		</button>
+		<div id="status" class="status"></div>
+	</div>
+	
+	<!-- فرم ویرایش نتیجه (مخفی تا وقتی نتیجه بیاد) -->
+	<div id="resultBox" class="result-box" style="display:none;">
+		<h3>نتیجه تشخیص:</h3>
+		<form method="POST" action="{{ url_for('add') }}" class="form">
+		<label>
+			مبلغ (تومان)
+			<input type="number" name="amount" id="resAmount" min="0" required>
+		</label>
+		<label>
+			دسته‌بندی
+			<select name="category" id="resCategory">
+			{% for c in categories %}
+				<option value="{{ c }}">{{ c }}</option>
+			{% endfor %}
+			</select>
+		</label>
+		<label>
+			توضیح
+			<input type="text" name="description" id="resDescription">
+		</label>
+		<input type="hidden" name="raw_transcript" id="resRawTranscript">
+		<div class="result-actions">
+			<button type="submit" class="btn-primary">💾 ذخیره</button>
+			<button type="button" id="cancelResult" class="btn-secondary">انصراف</button>
+		</div>
+		</form>
+	</div>
+	</section>
+    <section class="card">
+      <h2>ثبت هزینه جدید (دستی)</h2>
+      <form method="POST" action="{{ url_for('add') }}" class="form">
+        <label>
+          مبلغ (تومان)
+          <input type="number" name="amount" min="1" step="1" placeholder="مثلاً 120000" required>
+        </label>
+
+        <label>
+          دسته‌بندی
+          <select name="category">
+            {% for c in categories %}
+              <option value="{{ c }}">{{ c }}</option>
+            {% endfor %}
+          </select>
+        </label>
+
+        <label>
+          توضیح (اختیاری)
+          <input type="text" name="description" placeholder="مثلاً بنزین زدم">
+        </label>
+
+        <button type="submit" class="btn-primary">ذخیره هزینه</button>
+      </form>
+    </section>
+
+    <section class="card">
+      <h2>هزینه‌های اخیر</h2>
+      {% if expenses %}
+        <table class="expense-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>تاریخ</th>
+              <th>دسته</th>
+              <th>مبلغ (تومان)</th>
+              <th>توضیح</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for e in expenses %}
+            <tr>
+              <td>{{ e.id }}</td>
+              <td class="muted">{{ e.created_at }}</td>
+              <td><span class="badge">{{ e.category }}</span></td>
+              <td class="amount">{{ "{:,}".format(e.amount_toman) }}</td>
+              <td class="muted">{{ e.description or "—" }}</td>
+              <td>
+                <form method="POST" action="{{ url_for('delete', expense_id=e.id) }}"
+                      onsubmit="return confirm('حذف شود؟')">
+                  <button class="btn-danger" type="submit">حذف</button>
+                </form>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      {% else %}
+        <p class="empty">هنوز هزینه‌ای ثبت نشده. اولین هزینه رو اضافه کن!</p>
+      {% endif %}
+    </section>
+	<!-- تفکیک دسته‌بندی + نمودار -->
+	<section class="card">
+	<h2>📊 تفکیک هزینه‌ها (۳۰ روز اخیر)</h2>
+	{% if breakdown %}
+		<div class="breakdown-grid">
+		<div class="chart-wrap">
+			<canvas id="categoryChart"></canvas>
+		</div>
+		<ul class="breakdown-list">
+			{% for b in breakdown %}
+			<li>
+				<span class="badge">{{ b.category }}</span>
+				<span class="muted">({{ b.count }} مورد)</span>
+				<strong>{{ "{:,}".format(b.total_toman) }} تومان</strong>
+			</li>
+			{% endfor %}
+		</ul>
+		</div>
+	{% else %}
+		<p class="empty">در ۳۰ روز اخیر هزینه‌ای ثبت نشده.</p>
+	{% endif %}
+	</section>
+	
+	<!-- نمودار روند روزانه -->
+	<section class="card">
+	<h2>📈 روند ۷ روز اخیر</h2>
+	{% if trend %}
+		<div class="chart-wrap">
+		<canvas id="trendChart"></canvas>
+		</div>
+	{% else %}
+		<p class="empty">داده‌ای برای نمایش نیست.</p>
+	{% endif %}
+	</section>
+  </main>
+  <script src="{{ url_for('static', filename='chart.umd.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='chart.umd.min.js') }}"></script>
+  
+  <!-- کد ساخت نمودارها -->
+  <script>
+    const breakdownData = {{ breakdown | tojson }};
+    const trendData = {{ trend | tojson }};
+
+    // نمودار دایره‌ای (دسته‌بندی)
+    if (breakdownData.length > 0) {
+      const ctx1 = document.getElementById('categoryChart').getContext('2d');
+      new Chart(ctx1, {
+        type: 'doughnut',
+        data: {
+          labels: breakdownData.map(b => b.category),
+          datasets: [{
+            data: breakdownData.map(b => b.total_toman),
+            backgroundColor: [
+              '#2e9e6b', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6',
+              '#ec4899', '#06b6d4', '#84cc16', '#6b7280'
+            ],
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { position: 'bottom', labels: { font: { family: 'Vazirmatn' } } }
+          }
+        }
+      });
+    }
+
+    // نمودار خطی (روند ۷ روز)
+    if (trendData.length > 0) {
+      const ctx2 = document.getElementById('trendChart').getContext('2d');
+      new Chart(ctx2, {
+        type: 'line',
+        data: {
+          labels: trendData.map(t => t.day),
+          datasets: [{
+            label: 'هزینه روزانه (تومان)',
+            data: trendData.map(t => t.total_toman),
+            borderColor: '#2e9e6b',
+            backgroundColor: 'rgba(46, 158, 107, 0.15)',
+            fill: true,
+            tension: 0.3,
+            pointRadius: 5,
+            pointBackgroundColor: '#2e9e6b',
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { labels: { font: { family: 'Vazirmatn' } } }
+          },
+          scales: {
+            y: {
+              beginAtZero: true,
+              ticks: { font: { family: 'Vazirmatn' } }
+            },
+            x: { ticks: { font: { family: 'Vazirmatn' } } }
+          }
+        }
+      });
+    }
+  </script>
+
+  <script src="{{ url_for('static', filename='script.js') }}"></script>
+  <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>
