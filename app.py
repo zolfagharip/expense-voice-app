@@ -1,14 +1,19 @@
-from flask import Flask, render_template, request, redirect, url_for, jsonify
+from flask import Flask, render_template, request, redirect, url_for, jsonify, send_from_directory
 from dotenv import load_dotenv
 import os
 import tempfile
-import database as db
 import ai_service
+import database as db
 
 load_dotenv()
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = os.getenv("FLASK_SECRET_KEY", "dev-key")
+
+# ✅ این بخش اینجا اضافه شد تا با gunicorn هم جدول‌ها ساخته بشن
+with app.app_context():
+    db.init_db()
+
 
 # ---- توابع کمکی واحد پول ----
 def toman_to_rial(toman: int) -> int:
@@ -73,10 +78,10 @@ def delete(expense_id: int):
     return redirect(url_for("index"))
 
 
-# --- API برای فازهای بعدی (فعلاً فقط لیست) ---
 @app.get("/api/expenses")
 def api_expenses():
     return jsonify(db.list_expenses())
+
 
 @app.route("/api/voice", methods=["POST"])
 def api_voice():
@@ -113,14 +118,13 @@ def api_voice():
         if temp_path and os.path.exists(temp_path):
             os.remove(temp_path)
 
+
 @app.route("/sw.js")
 def service_worker():
-    from flask import send_from_directory
     return send_from_directory(
         app.static_folder, "sw.js", mimetype="application/javascript"
     )
 
+
 if __name__ == "__main__":
-    db.init_db()
-    # فقط برای توسعه محلی
     app.run(host="0.0.0.0", port=5000, debug=True, ssl_context="adhoc")
